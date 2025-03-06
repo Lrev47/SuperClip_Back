@@ -1,0 +1,29 @@
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env*.local
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# TypeScript output
+dist/
+build/
+*.tsbuildinfo
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+
+# Temp files
+jwt-test.ts
+test.ts
+simple-server.ts
