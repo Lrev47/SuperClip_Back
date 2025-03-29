@@ -8,21 +8,24 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  name      String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id             String          @id @default(uuid())
+  email          String          @unique
+  password       String
+  name           String?
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
   
   // Relations
-  prompts    Prompt[]
-  categories Category[]
+  clips          Clip[]
+  folders        Folder[]
+  tags           Tag[]
+  clipboardSets  ClipboardSet[]
 
   @@map("users")
 }
 
-model Category {
+// Folders replace categories and can be nested
+model Folder {
   id        String   @id @default(uuid())
   name      String
   icon      String?
@@ -33,27 +36,96 @@ model Category {
   updatedAt DateTime @updatedAt @map("updated_at")
   
   // Relations
-  parent     Category?  @relation("SubCategories", fields: [parentId], references: [id], onDelete: SetNull)
-  children   Category[] @relation("SubCategories")
-  prompts    Prompt[]
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent     Folder?     @relation("SubFolders", fields: [parentId], references: [id], onDelete: SetNull)
+  children   Folder[]    @relation("SubFolders")
+  clips      Clip[]
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Many-to-many with ClipboardSet
+  clipboardSets ClipboardSet[] @relation("FolderToClipboardSet")
 
-  @@map("categories")
+  @@map("folders")
 }
 
-model Prompt {
-  id          String   @id @default(uuid())
+// Tags for better organization
+model Tag {
+  id        String   @id @default(uuid())
+  name      String
+  color     String?
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  clips     Clip[]   @relation("ClipToTag")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([name, userId])
+  @@map("tags")
+}
+
+// Clip is the central entity for storing clipboard content
+model Clip {
+  id          String    @id @default(uuid())
   title       String
   content     String
   description String?
-  categoryId  String   @map("category_id")
+  folderId    String?   @map("folder_id")
+  userId      String    @map("user_id")
+  isFavorite  Boolean   @default(false) @map("is_favorite")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  folder     Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tags       Tag[]     @relation("ClipToTag")
+  
+  // Relation to ClipboardSetItems for ordered clips in sets
+  clipboardSetItems ClipboardSetItem[]
+
+  @@map("clips")
+}
+
+// ClipboardSet for grouping related clips together
+// For example, a collection of related SQL commands or a set of prompts for a specific project
+model ClipboardSet {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
   userId      String   @map("user_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   
   // Relations
-  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Relation to ClipboardSetItems for ordered clips
+  items       ClipboardSetItem[]
+  
+  // Many-to-many with Folder
+  folders     Folder[] @relation("FolderToClipboardSet")
 
-  @@map("prompts")
+  @@map("clipboard_sets")
+}
+
+// ClipboardSetItem joins Clips and ClipboardSets with ordering capability
+model ClipboardSetItem {
+  id             String       @id @default(uuid())
+  clipId         String       @map("clip_id")
+  clipboardSetId String       @map("clipboard_set_id")
+  position       Int          // Order position in the set
+  createdAt      DateTime     @default(now()) @map("created_at")
+  
+  // Relations
+  clip           Clip         @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  clipboardSet   ClipboardSet @relation(fields: [clipboardSetId], references: [id], onDelete: Cascade)
+
+  // Unique constraint to ensure a clip appears only once in a set
+  @@unique([clipId, clipboardSetId])
+  
+  // Index to optimize querying by position within a set
+  @@index([clipboardSetId, position])
+  
+  @@map("clipboard_set_items")
 } 
