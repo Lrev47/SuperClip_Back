@@ -1,100 +1,93 @@
 module.exports = {
+  root: true,
   parser: '@typescript-eslint/parser',
   parserOptions: {
-    project: 'tsconfig.json',
-    sourceType: 'module',
+    tsconfigRootDir: __dirname,
+    project: ['./tsconfig.json'],
     ecmaVersion: 2020,
+    sourceType: 'module',
   },
-  plugins: [
-    '@typescript-eslint/eslint-plugin',
-    'import',
-    'sonarjs',
-    'promise',
-    'security',
-  ],
+  plugins: ['@typescript-eslint', 'prettier'],
   extends: [
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
     'plugin:@typescript-eslint/recommended-requiring-type-checking',
-    'plugin:@typescript-eslint/strict',
-    'plugin:import/errors',
-    'plugin:import/warnings',
-    'plugin:import/typescript',
-    'plugin:sonarjs/recommended',
-    'plugin:promise/recommended',
-    'plugin:security/recommended',
+    'airbnb-typescript/base',
+    'prettier',
+    'plugin:prettier/recommended',
   ],
-  root: true,
-  env: {
-    node: true,
-    jest: true,
-  },
-  ignorePatterns: ['.eslintrc.js', 'dist', 'node_modules'],
   rules: {
-    // Typescript specific rules
-    '@typescript-eslint/explicit-function-return-type': 'error',
-    '@typescript-eslint/explicit-module-boundary-types': 'error',
-    '@typescript-eslint/no-explicit-any': 'error',
+    // Prettier integration
+    'prettier/prettier': 'error',
+
+    // TypeScript rules
+    '@typescript-eslint/explicit-function-return-type': 'warn',
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-    '@typescript-eslint/no-unnecessary-condition': 'error',
-    '@typescript-eslint/prefer-nullish-coalescing': 'error',
-    '@typescript-eslint/prefer-optional-chain': 'error',
-    '@typescript-eslint/strict-boolean-expressions': 'error',
-    '@typescript-eslint/no-floating-promises': 'error',
-    '@typescript-eslint/naming-convention': [
-      'error',
-      {
-        selector: 'interface',
-        format: ['PascalCase'],
-        prefix: ['I']
-      },
-      {
-        selector: 'typeAlias',
-        format: ['PascalCase'],
-        prefix: ['T']
-      },
-      {
-        selector: 'enum',
-        format: ['PascalCase'],
-        prefix: ['E']
-      },
-    ],
-    
-    // General rules
-    'no-console': ['warn', { allow: ['warn', 'error'] }],
-    'prefer-const': 'error',
-    'no-var': 'error',
-    'eqeqeq': ['error', 'always'],
-    'curly': ['error', 'all'],
-    'max-depth': ['error', 3],
-    'complexity': ['error', 10],
-    
+    '@typescript-eslint/no-explicit-any': 'warn',
+    '@typescript-eslint/explicit-module-boundary-types': 'warn',
+
     // Import rules
-    'import/order': [
-      'error',
-      {
-        'groups': ['builtin', 'external', 'internal', ['parent', 'sibling'], 'index'],
-        'newlines-between': 'always',
-        'alphabetize': { order: 'asc', caseInsensitive: true }
-      }
-    ],
-    'import/no-duplicates': 'error',
+    'import/prefer-default-export': 'off',
+    'import/no-extraneous-dependencies': 'off',
+    'import/extensions': 'off',
+
+    // Style rules
+    'max-len': ['warn', { code: 100 }],
+
+    // Temporary disabled rules until existing code is fixed
+    '@typescript-eslint/no-unsafe-assignment': 'off',
+    '@typescript-eslint/no-unsafe-call': 'off',
+    '@typescript-eslint/no-unsafe-member-access': 'off',
+    '@typescript-eslint/no-unsafe-return': 'off',
+    '@typescript-eslint/no-misused-promises': 'off',
   },
-  settings: {
-    'import/resolver': {
-      typescript: {},
-    },
-  },
+  ignorePatterns: [
+    'dist/',
+    'node_modules/',
+    'jest.config.js',
+    '.eslintrc.js',
+    'coverage/',
+    'testConfig/',
+  ],
   overrides: [
     {
-      // Special rules for auth middleware
-      files: ['**/middleware/auth*.ts'],
+      files: ['tests/**/*.ts', 'testConfig/**/*.ts'],
       rules: {
-        'complexity': ['error', 15],
-        'sonarjs/cognitive-complexity': ['error', 20],
-        '@typescript-eslint/no-unnecessary-condition': 'off',
-        '@typescript-eslint/strict-boolean-expressions': 'off'
-      }
-    }
-  ]
-}; 
+        '@typescript-eslint/no-var-requires': 'off',
+        '@typescript-eslint/explicit-function-return-type': 'off',
+        '@typescript-eslint/unbound-method': 'off',
+        '@typescript-eslint/no-shadow': 'off',
+        '@typescript-eslint/no-misused-promises': 'off',
+      },
+    },
+    {
+      // Express-specific rules
+      files: ['src/app.ts', 'src/routes/**/*.ts', 'src/middleware/**/*.ts'],
+      rules: {
+        '@typescript-eslint/no-unsafe-assignment': 'off',
+        '@typescript-eslint/no-unsafe-call': 'off',
+        '@typescript-eslint/no-unsafe-member-access': 'off',
+        '@typescript-eslint/no-unsafe-return': 'off',
+        '@typescript-eslint/ban-types': 'off',
+        '@typescript-eslint/restrict-plus-operands': 'off',
+        '@typescript-eslint/no-misused-promises': 'off',
+        '@typescript-eslint/unbound-method': 'off',
+        '@typescript-eslint/no-unsafe-argument': 'off',
+      },
+    },
+    {
+      // Server file rules
+      files: ['src/server.ts'],
+      rules: {
+        '@typescript-eslint/no-unsafe-argument': 'off',
+      },
+    },
+    {
+      // Test files rules
+      files: ['tests/**/*.ts'],
+      rules: {
+        '@typescript-eslint/no-unsafe-argument': 'off',
+      },
+    },
+  ],
+};

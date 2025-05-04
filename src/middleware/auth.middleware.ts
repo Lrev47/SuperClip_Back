@@ -1,161 +1,108 @@
-import { NextFunction, Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import { Request, Response, NextFunction } from 'express';
+import * as jwt from 'jsonwebtoken';
 
-import { prisma } from '../server';
+// User role enum
+export enum UserRole {
+  USER = 'USER',
+  ADMIN = 'ADMIN',
+}
 
-/**
- * Interface for authenticated request with user data
- */
-interface IAuthenticatedRequest extends Request {
+// Type for decoded JWT token
+interface DecodedToken {
+  userId: string;
+  email: string;
+  role: UserRole;
+  iat: number;
+  exp: number;
+}
+
+// Extend Express Request type to include user
+interface RequestWithUser extends Request {
   user?: {
     id: string;
+    email: string;
+    role: UserRole;
   };
 }
 
 /**
- * Interface for JWT payload with user ID
+ * Middleware that validates JWT from Authorization header
  */
-interface IJwtPayload {
-  id: string;
-  [key: string]: unknown;
-}
-
-/**
- * Type guard to check if a value is a valid JWT payload with ID
- */
-function isValidPayload(payload: unknown): payload is IJwtPayload {
-  return (
-    typeof payload === 'object' &&
-    payload !== null &&
-    'id' in payload &&
-    typeof payload.id === 'string' &&
-    payload.id !== ''
-  );
-}
-
-/**
- * Authentication middleware that verifies JWT tokens
- */
-export function authenticate(
-  req: IAuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): void {
-  try {
-    // 1. Check if authorization header exists
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      res.status(401).json({
-        status: 'error',
-        message: 'Authentication required',
-      });
-      return;
-    }
-
-    // 2. Validate Bearer token format
-    if (!authHeader.startsWith('Bearer ')) {
-      res.status(401).json({
-        status: 'error',
-        message: 'Invalid authentication format. Use Bearer token.',
-      });
-      return;
-    }
-
-    // 3. Extract token
-    const token = authHeader.split(' ')[1];
-    if (!token) {
-      res.status(401).json({
-        status: 'error',
-        message: 'Empty token provided',
-      });
-      return;
-    }
-
-    // 4. Get JWT secret from environment variables
-    const jwtSecret = process.env['JWT_SECRET'];
-    if (!jwtSecret) {
-      res.status(500).json({
-        status: 'error',
-        message: 'Server authentication configuration error',
-      });
-      return;
-    }
-
-    try {
-      // 5. Verify token
-      const payload = jwt.verify(token, jwtSecret);
-
-      // 6. Validate payload structure
-      if (!isValidPayload(payload)) {
-        res.status(401).json({
-          status: 'error',
-          message: 'Invalid token format',
-        });
-        return;
-      }
-
-      // 7. Start the process of validating the user
-      void verifyUserAndProceed(payload.id, req, res, next);
-    } catch (tokenError) {
-      // Handle specific JWT errors
-      if (tokenError instanceof jwt.TokenExpiredError) {
-        res.status(401).json({
-          status: 'error',
-          message: 'Token has expired. Please log in again.',
-        });
-        return;
-      }
-      
-      if (tokenError instanceof jwt.JsonWebTokenError) {
-        res.status(401).json({
-          status: 'error',
-          message: 'Invalid token. Please log in again.',
-        });
-        return;
-      }
-      
-      // For other token errors
-      res.status(401).json({
-        status: 'error',
-        message: 'Authentication failed',
-      });
-      return;
-    }
-  } catch (error) {
-    next(error);
-  }
-}
-
-/**
- * Verifies that a user exists and proceeds with the request
- */
-async function verifyUserAndProceed(
-  userId: string,
-  req: IAuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  try {
-    // Check if user exists in the database
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true },
+export const authenticate = (req: RequestWithUser, res: Response, next: NextFunction): void => {
+  // Check if Authorization header exists
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Authentication required',
     });
-    
-    if (!user) {
-      res.status(401).json({
-        status: 'error',
-        message: 'User no longer exists',
+    return;
+  }
+
+  // Check token format
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer') {
+    res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Invalid token format',
+    });
+    return;
+  }
+
+  const token = parts[1];
+
+  try {
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_secret') as DecodedToken;
+
+    // Set user info on request object
+    req.user = {
+      id: decoded.userId,
+      email: decoded.email,
+      role: decoded.role,
+    };
+
+    next();
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'TokenExpiredError') {
+      res.status(403).json({
+        error: 'Forbidden',
+        message: 'Token has expired',
       });
       return;
     }
-    
-    // Set user info on request object
-    req.user = { id: user.id };
-    
-    // Proceed to the next middleware
-    next();
-  } catch (error) {
-    next(error);
+
+    res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Invalid token',
+    });
+    return;
   }
-} 
+};
+
+/**
+ * Middleware that checks if user has required role
+ */
+export const authorize = (roles: UserRole[]) => {
+  return (req: RequestWithUser, res: Response, next: NextFunction): void => {
+    // Check if user is authenticated
+    if (!req.user) {
+      res.status(403).json({
+        error: 'Forbidden',
+        message: 'Access denied',
+      });
+      return;
+    }
+
+    // Check if user has required role
+    if (!roles.includes(req.user.role)) {
+      res.status(403).json({
+        error: 'Forbidden',
+        message: 'Insufficient permissions',
+      });
+      return;
+    }
+
+    next();
+  };
+};

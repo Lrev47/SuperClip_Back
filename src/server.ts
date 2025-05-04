@@ -1,48 +1,66 @@
-import { Server } from 'http';
+import http from 'http';
+import dotenv from 'dotenv';
+import app from './app';
 
-import { PrismaClient } from '@prisma/client';
-import { config } from 'dotenv';
+// Load environment variables
+dotenv.config();
 
-// Load environment variables first
-config();
+// Set up port from environment or use default
+const PORT = parseInt(process.env.PORT || '3000', 10);
 
-// Import app after environment variables are loaded
-import { app } from './app';
-
-// Initialize Prisma client
-export const prisma = new PrismaClient();
-
-// Server configuration
-const PORT = process.env['PORT'] ?? 3000;
+// Create HTTP server
+const server = http.createServer(app);
 
 // Start the server
-const server: Server = app.listen(PORT, () => {
-  console.warn(`Server running on port ${PORT}`);
+server.listen(PORT, (): void => {
+  console.log(`Server is running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  console.log(`API documentation available at http://localhost:${PORT}/api-docs`);
 });
 
-// Handle unhandled rejections
-process.on('unhandledRejection', (err: Error) => {
+// Graceful shutdown function
+export const shutDown = (exitCode = 0): void => {
+  console.log('Closing HTTP server...');
+  if (server && server.close && typeof server.close === 'function') {
+    server.close(() => {
+      console.log('HTTP server closed');
+      process.exit(exitCode);
+    });
+  } else {
+    console.log('HTTP server not available or already closed');
+    process.exit(exitCode);
+  }
+};
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (error: Error) => {
   console.error('UNHANDLED REJECTION! 💥 Shutting down...');
-  console.error(err.name, err.message);
-  
-  // Graceful shutdown
-  server.close(() => {
-    process.exit(1);
-  });
+  console.error(error.name, error.message);
+  console.error(error.stack);
+
+  // Graceful shutdown with error code
+  shutDown(1);
 });
 
 // Handle uncaught exceptions
-process.on('uncaughtException', (err: Error) => {
+process.on('uncaughtException', (error: Error) => {
   console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...');
-  console.error(err.name, err.message);
+  console.error(error.name, error.message);
+  console.error(error.stack);
+
+  // Exit with error code
   process.exit(1);
 });
 
-// Handle shutdown gracefully
+// Handle SIGTERM signal
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received. Gracefully shutting down...');
+  shutDown();
+});
+
+// Handle SIGINT signal (Ctrl+C)
 process.on('SIGINT', () => {
-  void (async (): Promise<void> => {
-    await prisma.$disconnect();
-    console.warn('Server shut down gracefully');
-    process.exit(0);
-  })();
-}); 
+  console.log('SIGINT received. Gracefully shutting down...');
+  shutDown();
+});
+
+export default server;

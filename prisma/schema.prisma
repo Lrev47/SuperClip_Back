@@ -20,6 +20,8 @@ model User {
   folders        Folder[]
   tags           Tag[]
   clipboardSets  ClipboardSet[]
+  promptTemplates PromptTemplate[]
+  devices        Device[]
 
   @@map("users")
 }
@@ -40,6 +42,8 @@ model Folder {
   children   Folder[]    @relation("SubFolders")
   clips      Clip[]
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promptTemplates PromptTemplate[]
+  ownedSets  ClipboardSet[] @relation("FolderOwnership")
   
   // Many-to-many with ClipboardSet
   clipboardSets ClipboardSet[] @relation("FolderToClipboardSet")
@@ -59,6 +63,8 @@ model Tag {
   // Relations
   clips     Clip[]   @relation("ClipToTag")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promptTemplates PromptTemplate[] @relation("TemplateToTag")
+  clipboardSets ClipboardSet[] @relation("ClipboardSetToTag")
 
   @@unique([name, userId])
   @@map("tags")
@@ -66,15 +72,21 @@ model Tag {
 
 // Clip is the central entity for storing clipboard content
 model Clip {
-  id          String    @id @default(uuid())
+  id          String        @id @default(uuid())
   title       String
   content     String
   description String?
-  folderId    String?   @map("folder_id")
-  userId      String    @map("user_id")
-  isFavorite  Boolean   @default(false) @map("is_favorite")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  contentType ClipType      @default(TEXT) @map("content_type")
+  format      String?       // e.g., "markdown", "html", "plain"
+  folderId    String?       @map("folder_id")
+  userId      String        @map("user_id")
+  isFavorite  Boolean       @default(false) @map("is_favorite")
+  isPinned    Boolean       @default(false) @map("is_pinned")
+  lastUsed    DateTime?     @map("last_used")
+  useCount    Int           @default(0) @map("use_count")
+  syncStatus  SyncStatus    @default(SYNCED) @map("sync_status")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
   
   // Relations
   folder     Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
@@ -83,38 +95,46 @@ model Clip {
   
   // Relation to ClipboardSetItems for ordered clips in sets
   clipboardSetItems ClipboardSetItem[]
+  
+  // Track which devices have this clip
+  devices    Device[]  @relation("ClipToDevice")
 
   @@map("clips")
 }
 
-// ClipboardSet for grouping related clips together
-// For example, a collection of related SQL commands or a set of prompts for a specific project
+// ClipboardSet for grouping related clips together in ordered sequences
 model ClipboardSet {
   id          String   @id @default(uuid())
   name        String
   description String?
+  isActive    Boolean  @default(true) @map("is_active")
   userId      String   @map("user_id")
+  folderId    String?  @map("folder_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   
   // Relations
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder      Folder?  @relation("FolderOwnership", fields: [folderId], references: [id], onDelete: SetNull)
   
   // Relation to ClipboardSetItems for ordered clips
   items       ClipboardSetItem[]
   
-  // Many-to-many with Folder
+  // Many-to-many with Folder and Tags
   folders     Folder[] @relation("FolderToClipboardSet")
+  tags        Tag[]    @relation("ClipboardSetToTag")
 
   @@map("clipboard_sets")
 }
 
-// ClipboardSetItem joins Clips and ClipboardSets with ordering capability
+// ClipboardSetItem joins Clips and ClipboardSets with ordering and step details
 model ClipboardSetItem {
   id             String       @id @default(uuid())
   clipId         String       @map("clip_id")
   clipboardSetId String       @map("clipboard_set_id")
   position       Int          // Order position in the set
+  name           String?      // Optional name for this step
+  description    String?      // Optional description for this step  
   createdAt      DateTime     @default(now()) @map("created_at")
   
   // Relations
@@ -124,8 +144,66 @@ model ClipboardSetItem {
   // Unique constraint to ensure a clip appears only once in a set
   @@unique([clipId, clipboardSetId])
   
+  // Ensure no duplicate positions in the same set
+  @@unique([clipboardSetId, position])
+  
   // Index to optimize querying by position within a set
   @@index([clipboardSetId, position])
   
   @@map("clipboard_set_items")
+}
+
+// Types of clipboard content
+enum ClipType {
+  TEXT
+  CODE
+  AI_PROMPT
+  IMAGE_URL
+  RICH_TEXT
+  SNIPPET
+}
+
+// AI Prompt Templates with variable placeholders
+model PromptTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  template    String   // Template with placeholders like {{variable}}
+  variables   Json?    // Stores variable names and default values
+  userId      String   @map("user_id")
+  categoryId  String?  @map("category_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   Folder?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags       Tag[]     @relation("TemplateToTag")
+
+  @@map("prompt_templates")
+}
+
+// Synchronization status
+enum SyncStatus {
+  SYNCED      // Fully synchronized across devices
+  PENDING     // Waiting to be synchronized
+  CONFLICT    // Has conflicts that need resolution
+  LOCAL_ONLY  // Only stored locally, not synced
+}
+
+// Device model for multi-device sync
+model Device {
+  id            String    @id @default(uuid())
+  name          String
+  deviceType    String?
+  lastSyncedAt  DateTime? @map("last_synced_at")
+  userId        String    @map("user_id")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clips     Clip[]  @relation("ClipToDevice")
+
+  @@map("devices")
 } 

@@ -1,0 +1,253 @@
+openapi: 3.0.3
+info:
+  title: SuperClip API
+  description: API documentation for the SuperClip application
+  version: 1.0.0
+  contact:
+    name: SuperClip Support
+servers:
+  - url: http://localhost:3000
+    description: Development server
+  - url: https://api.superclip.example.com
+    description: Production server
+tags:
+  - name: Clips
+    description: Operations related to clipboard items
+  - name: Users
+    description: User management operations
+  - name: Folders
+    description: Operations for organizing clips in folders
+  - name: Tags
+    description: Operations for tagging clips
+  - name: Clipboard Sets
+    description: Operations for managing ordered sequences of clips
+  - name: Prompt Templates
+    description: Operations for AI prompt templates
+  - name: Devices
+    description: Operations for device management and synchronization
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns the current health status of the API
+      operationId: getHealthStatus
+      tags:
+        - Health
+      responses:
+        '200':
+          description: API is operational
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/v1/clips:
+    get:
+      summary: Get all clips
+      description: Retrieves all clips for the authenticated user
+      operationId: getClips
+      tags:
+        - Clips
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of clips to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of clips to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: search
+          in: query
+          description: Search term for filtering clips
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of clips
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clips:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Clip'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Create a new clip
+      description: Creates a new clip for the authenticated user
+      operationId: createClip
+      tags:
+        - Clips
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClipInput'
+      responses:
+        '201':
+          description: Clip created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Clip'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  schemas:
+    Clip:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        content:
+          type: string
+        description:
+          type: string
+          nullable: true
+        contentType:
+          type: string
+          enum: [TEXT, CODE, AI_PROMPT, IMAGE_URL, RICH_TEXT, SNIPPET]
+        format:
+          type: string
+          nullable: true
+        folderId:
+          type: string
+          format: uuid
+          nullable: true
+        isFavorite:
+          type: boolean
+          default: false
+        isPinned:
+          type: boolean
+          default: false
+        lastUsed:
+          type: string
+          format: date-time
+          nullable: true
+        useCount:
+          type: integer
+          default: 0
+        syncStatus:
+          type: string
+          enum: [SYNCED, PENDING, CONFLICT, LOCAL_ONLY]
+          default: SYNCED
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+        - title
+        - content
+
+    ClipInput:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        description:
+          type: string
+          nullable: true
+        contentType:
+          type: string
+          enum: [TEXT, CODE, AI_PROMPT, IMAGE_URL, RICH_TEXT, SNIPPET]
+          default: TEXT
+        format:
+          type: string
+          nullable: true
+        folderId:
+          type: string
+          format: uuid
+          nullable: true
+        isFavorite:
+          type: boolean
+          default: false
+        isPinned:
+          type: boolean
+          default: false
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+        - title
+        - content
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: Validation Error
+              message:
+                type: string
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: Unauthorized
+              message:
+                type: string
+                example: Authentication required
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: Not Found
+              message:
+                type: string
+                example: Requested resource was not found 
